@@ -1,0 +1,315 @@
+<!doctype html>
+<link rel="icon" href="data:,">
+<meta charset="utf-8">
+<meta content="width=device-width,initial-scale=1" name="viewport">
+<style>
+body:not([data-screen="practice"]) #practice { display:none; }
+body:not([data-screen="adding"]) #adding { display:none; }
+body:not([data-screen="editing"]) #editing { display:none; }
+body:not([data-screen="editing1"]) #editing1 { display:none; }
+
+#practiceloading { height:80%; display:flex; align-items:center; justify-content:center; }
+#practicedone { height:80%; display:flex; align-items:center; justify-content:center; }
+
+body:not([data-practice="entry"]) #practiceentry { display:none; }
+body:not([data-practice="loading"]) #practiceloading { display:none; }
+body:not([data-practice="done"]) #practicedone { display:none; }
+
+#reveal { height:50%; display:flex; width:100%; align-items:center; justify-content:center; }
+#yesno { height:50%; display:flex; position:relative; }
+body:not([data-practiceentry="hidden"]) #reveal { display:none; }
+body:not([data-practiceentry="shown"]) #yesno { display:none; }
+
+body,textarea,input,button { font-size:24px }
+textarea,body { font-family:sans-serif; }
+button,input { border-radius:8px; }
+
+#correct,#wrong { border-style:solid; border-width:3px; width:50%; }
+#correct { border-color:#e2ffe3; border-left:none; border-radius:0 8px 8px 0; }
+#wrong { border-color:#fff0f0; border-right:none; border-radius:8px 0 0 8px; }
+#correct:active { background-color:#e2ffe3; }
+#wrong:active { background-color:#fff0f0; }
+
+.edit { display:flex; }
+</style>
+<body data-screen="practice" data-practice="loading" style="margin:0">
+<div id="practice" class="screenheight" style="height:100vh">
+	<div id="practiceentry" style="height:80%">
+		<div id="eprompt" style="height:50%; display:flex; align-items:center; justify-content:center"></div>
+		<button id="reveal">Reveal...</button>
+		<div id="yesno">
+			<div id="answer" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); pointer-events:none"></div>
+			<div id="wrong"></div>
+			<div id="correct"></div>
+		</div>
+	</div>
+	<div id="practiceloading">Loading...</div>
+	<div id="practicedone">Done!</div>
+	<div id="editadd" style="height:20%; display:flex; flex-direction:row">
+		<button id="edit" style="flex-grow:1">Edit</button>
+		<button id="add" style="flex-grow:1">Add</button>
+	</div>
+</div>
+<div id="adding" class="screenheight" style="height:100vh">
+	<textarea id="addprompt" style="width:100%; box-sizing:border-box; height:40%; display:block"></textarea>
+	<textarea id="addanswer" style="width:100%; box-sizing:border-box; height:40%; display:block"></textarea>
+	<div style="height:20%; display:flex; flex-direction:row">
+		<button id="addcancel" style="flex-grow:1; flex-basis:0">Back</button>
+		<button id="add2" style="flex-grow:1; flex-basis:0">Add both directions</button>
+		<button id="add1" style="flex-grow:1; flex-basis:0">Add one way</button>
+	</div>
+</div>
+<div id="editing" class="screenheight" style="height:100vh">
+	<div id="eentries" style="height:80%; overflow-y:scroll"></div>
+	<div style="height:20%; display:flex; flex-direction:row">
+		<button id="back" style="width:30%; display:flex; align-items:center; justify-content:center">Back</button>
+		<input id="search" type="text" placeholder="Search" style="width:70%; text-align:center">
+	</div>
+</div>
+<div id="editing1" class="screenheight">
+<textarea id="editprompt" style="width:100%; box-sizing:border-box; height:40%; display:block"></textarea>
+	<textarea id="editanswer" style="width:100%; box-sizing:border-box; height:40%; display:block"></textarea>
+	<div style="height:20%; display:flex; flex-direction:row">
+		<button id="editcancel" style="flex-grow:1; flex-basis:0">Cancel</button>
+		<button id="editdelete" style="flex-grow:1; flex-basis:0">Delete</button>
+		<button id="editsave" style="flex-grow:1; flex-basis:0">Save</button>
+	</div>
+</div>
+<div id="templates" style="display:none">
+	<div class="edit">
+		<div style="width:70%; border-radius:8px">
+			<div class="editprompt" style="display:flex; align-items:center; justify-content:center; background-color:#eeeeee"></div>
+			<div class="editanswer" style="display:flex; align-items:center; justify-content:center"></div>
+		</div>
+		<button class="edit" style="width:30%; display:flex; align-items:center; justify-content:center">Edit</button>
+	</div>
+</div>
+</body>
+<script>
+'use script'
+
+function openDb(onOpen) {
+	const reqOpen = window.indexedDB.open('entries');
+	reqOpen.onupgradeneeded = e => {
+		const db = e.target.result;
+		if (!db.objectStoreNames.length) db.createObjectStore('entries');
+	};
+	reqOpen.onsuccess = onOpen;
+}
+
+let isSaving = false;
+function saveEntries() {
+	if (isSaving) return;
+	isSaving = true;
+	openDb(evOpen => {
+		const store = evOpen.target.result.transaction('entries','readwrite').objectStore('entries');
+		store.get('entries').onsuccess = evGet => {
+			store.put(entries, 'entries').onsuccess = () => {
+				isSaving = false;
+			};
+		};
+	});
+}
+
+function addEntry(a, b) {
+	entries.push({a, b, day:today, score:0});
+	saveEntries();
+}
+
+function setPracticeText(a, b) {
+	eprompt.textContent = a;
+	answer.textContent = b;
+}
+
+let entryPracticing;
+function refreshPractice() {
+
+	// Find weakest two entries
+	let w1, w2;
+  let pmin = 1.0;
+	for (const entry of entries) {
+    const praw = Math.pow(2, -(today-entry.day)/Math.pow(2,entry.score));
+    const p = praw - 0.2*Math.random();  // shuffle a little
+    if ((praw <= 0.5) && (p < pmin))
+      pmin=p, w2=w1, w1=entry;
+	}
+
+	// No entries left
+	if (!w1) {
+		document.body.dataset.practice = 'done';
+		return;
+	}
+
+	// Choose the weakest unless we just practiced its reverse
+	entryPracticing = (entryPracticing && w2 && (w1.a==entryPracticing.b || w1.b==entryPracticing.a)) ? w2 : w1;
+
+  // Practice entry
+	setPracticeText(entryPracticing.a, entryPracticing.b);
+	document.body.dataset.practiceentry = 'hidden';
+	document.body.dataset.practice = 'entry';
+}
+
+function cloneTemplate(cls) {
+	return document.querySelector('#templates > .'+cls).cloneNode(true);
+}
+
+function recalcScreenHeights() {
+	for (const e of [...document.querySelectorAll('.screenheight')]) {
+		e.style.height = window.innerHeight+'px';
+	}
+}
+
+function showEdit() {
+
+	// Recreate entries
+	while (eentries.firstElementChild) eentries.removeChild(eentries.firstElementChild);
+	for (let i=0; i<entries.length; i++) {
+		const eEntry = cloneTemplate('edit');
+		eentries.appendChild(eEntry);
+		eEntry.querySelector('.editprompt').textContent = entries[i].a;
+		eEntry.querySelector('.editanswer').textContent = entries[i].b;
+		eEntry.querySelector('.edit').addEventListener('click', () => {
+			
+			// Open edit for this entry
+			iEntryEditing = i;
+			document.body.dataset.screen = 'editing1';
+			editprompt.value = entries[i].a;
+			editanswer.value = entries[i].b;
+		});
+	}
+
+	// Reveal screen
+	search.value = '';
+	document.body.dataset.screen = 'editing';
+	search.focus();
+}
+
+function showPractice() {
+	document.body.dataset.screen = 'practice';
+	refreshPractice();
+}
+
+function practicedEntry(score) {
+	entryPracticing.score = score;
+	entryPracticing.day = today;
+	saveEntries();
+	refreshPractice();
+}
+
+// Click add
+add.addEventListener('click', () => {
+	addprompt.value = '';
+	addanswer.value = '';
+	document.body.dataset.screen = 'adding';
+	addprompt.focus();
+});
+
+// Click add cancel
+addcancel.addEventListener('click', () => {
+	showPractice();
+});
+
+// Click edit
+let iEntryEditing;
+edit.addEventListener('click', () => {
+	showEdit();
+});
+
+// Click edit back
+back.addEventListener('click', () => {
+	showPractice();
+});
+
+// Add word one way
+add1.addEventListener('click', () => {
+	if (!addprompt.value || !addanswer.value) return;
+	addEntry(addprompt.value, addanswer.value);
+	addprompt.value = addanswer.value = '';
+	addprompt.focus();
+});
+
+// Add word both ways
+add2.addEventListener('click', () => {
+	if (!addprompt.value || !addanswer.value) return;
+	addEntry(addprompt.value, addanswer.value);
+	addEntry(addanswer.value, addprompt.value);
+	addprompt.value = addanswer.value = '';
+	addprompt.focus();
+});
+
+// Reveal answer
+reveal.addEventListener('click', () => {
+	document.body.dataset.practiceentry = 'shown';
+});
+
+// Window resize
+window.addEventListener('resize', () => {
+	recalcScreenHeights();
+});
+
+// Cancel edit individual
+editcancel.addEventListener('click', () => {
+	showEdit();
+});
+
+// Save edit individual
+editsave.addEventListener('click', () => {
+	entries[iEntryEditing].a = editprompt.value;
+	entries[iEntryEditing].b = editanswer.value;
+	saveEntries();
+	showEdit();
+});
+
+// Delete edit individual
+editdelete.addEventListener('click', () => {
+	entries.splice(iEntryEditing, 1);
+	saveEntries();
+	showEdit();
+});
+
+// Wrong
+wrong.addEventListener('click', () => {
+	practicedEntry(Math.max(0,entryPracticing.score-1));
+});
+
+// Right
+correct.addEventListener('click', () => {
+	practicedEntry(entryPracticing.score+1);
+});
+
+// Searching
+search.addEventListener('input', () => {
+	const re = new RegExp(search.value, 'i');
+	const s = search.value.toLowerjkjk;
+	for (let i=0; i<entries.length; i++)
+		eentries.children[i].style.display = (entries[i].a.match(re)||entries[i].b.match(re)) ? '' : 'none';
+});
+
+// Calculate today
+const now = new Date();
+const year = now.getFullYear();
+let today = year*365 + now.getDate();
+for (let i=0; i<now.getMonth(); i++) switch (i) {
+case 0: today+=31; break;
+case 1: today+=28+((year%4==0&&year%100!=0)||year%400==0); break;
+case 2: today+=31; break;
+case 3: today+=30; break;
+case 4: today+=31; break;
+case 5: today+=30; break;
+case 6: today+=31; break;
+case 7: today+=31; break;
+case 8: today+=30; break;
+case 9: today+=31; break;
+case 10: today+=30; break;
+}
+
+// Load entries
+let entries;
+openDb(evOpen => {
+	evOpen.target.result.transaction('entries','readonly').objectStore('entries').get('entries').onsuccess = evGet => {
+		entries = evGet.target.result || [];
+		refreshPractice();
+	};
+});
+recalcScreenHeights();
+</script>
