@@ -9,13 +9,13 @@ body:not([data-screen="editing"]) #editing { display:none; }
 body:not([data-screen="editing1"]) #editing1 { display:none; }
 
 #practiceloading { height:80%; display:flex; align-items:center; justify-content:center; }
-#practicedone { height:80%; display:flex; align-items:center; justify-content:center; }
+#practicedone { height:80%; display:flex; align-items:center; justify-content:center; flex-direction:column; }
 
 body:not([data-practice="entry"]) #practiceentry { display:none; }
 body:not([data-practice="loading"]) #practiceloading { display:none; }
 body:not([data-practice="done"]) #practicedone { display:none; }
 
-#reveal { height:50%; display:flex; width:100%; align-items:center; justify-content:center; }
+#reveal { height:50%; display:flex; width:100%; align-items:center; justify-content:center; flex-direction:column; }
 #yesno { height:50%; display:flex; position:relative; }
 body:not([data-practiceentry="hidden"]) #reveal { display:none; }
 body:not([data-practiceentry="shown"]) #yesno { display:none; }
@@ -36,7 +36,17 @@ button,input { border-radius:8px; }
 <div id="practice" class="screenheight" style="height:100vh">
 	<div id="practiceentry" style="height:80%">
 		<div id="eprompt" style="height:50%; display:flex; align-items:center; justify-content:center"></div>
-		<button id="reveal">Reveal...</button>
+		<button id="reveal">
+			<div style="margin-bottom:8px">Reveal...</div>
+			<div style="font-size:15px">
+				Today:
+				<span id="ntoday"></span>
+			</div>
+			<div style="font-size:15px">
+				Tomorrow:
+				<span class="ntomorrow"></span>
+			</div>
+		</button>
 		<div id="yesno">
 			<div id="answer" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); pointer-events:none"></div>
 			<div id="wrong"></div>
@@ -44,7 +54,13 @@ button,input { border-radius:8px; }
 		</div>
 	</div>
 	<div id="practiceloading">Loading...</div>
-	<div id="practicedone">Done!</div>
+	<div id="practicedone">
+		<div>Done!</div>
+		<div>
+			Tomorrow:
+			<span class="ntomorrow"></span>
+		</div>
+	</div>
 	<div id="editadd" style="height:20%; display:flex; flex-direction:row">
 		<button id="edit" style="flex-grow:1">Edit</button>
 		<button id="add" style="flex-grow:1">Add</button>
@@ -111,9 +127,24 @@ function saveEntries() {
 	});
 }
 
+function getPremember(entry, day) {
+	return Math.pow(2, -((day||today)-entry.day)/Math.pow(2,entry.score));
+}
+
+function refreshNleft() {
+	let nToday=0, nTomorrow=0;
+	for (const entry of entries) {
+		if (getPremember(entry) <= 0.5) nToday++;
+		if (getPremember(entry,today+1) <= 0.5) nTomorrow++;
+	}
+	ntoday.textContent = nToday;
+	for (const e of [...document.querySelectorAll('.ntomorrow')]) e.textContent=nTomorrow;
+}
+
 function addEntry(a, b) {
-	entries.push({a, b, day:today, score:0});
+	entries.push({a, b, day:today-1, score:0});
 	saveEntries();
+	refreshNleft();
 }
 
 function setPracticeText(a, b) {
@@ -128,7 +159,7 @@ function refreshPractice() {
 	let w1, w2;
   let pmin = 1.0;
 	for (const entry of entries) {
-    const praw = Math.pow(2, -(today-entry.day)/Math.pow(2,entry.score));
+    const praw = getPremember(entry);
     const p = praw - 0.2*Math.random();  // shuffle a little
     if ((praw <= 0.5) && (p < pmin))
       pmin=p, w2=w1, w1=entry;
@@ -194,6 +225,7 @@ function practicedEntry(score) {
 	entryPracticing.day = today;
 	saveEntries();
 	refreshPractice();
+	refreshNleft();
 }
 
 // Click add
@@ -309,6 +341,7 @@ openDb(evOpen => {
 	evOpen.target.result.transaction('entries','readonly').objectStore('entries').get('entries').onsuccess = evGet => {
 		entries = evGet.target.result || [];
 		refreshPractice();
+		refreshNleft();
 	};
 });
 recalcScreenHeights();
