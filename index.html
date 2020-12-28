@@ -78,7 +78,9 @@ button,input { border-radius:8px; }
 	</div>
 </div>
 <div id="editing" class="screenheight" style="height:100vh">
-	<div id="eentries" style="height:80%; overflow-y:scroll"></div>
+	<div id="eentries" style="height:80%; overflow-y:scroll">
+		<div id="version" style="opacity:0.1; text-align:center; margin-right:30%">Version: 1</div>
+	</div>
 	<div style="height:20%; display:flex; flex-direction:row">
 		<button id="back" style="width:30%; display:flex; align-items:center; justify-content:center">Back</button>
 		<input id="search" type="text" placeholder="Search" style="width:70%; text-align:center">
@@ -129,14 +131,35 @@ function saveEntries() {
 	});
 }
 
+function getIdayToday() {
+	const now = new Date();
+	const year = now.getFullYear();
+	let today = year*365 + now.getDate();
+	for (let i=0; i<now.getMonth(); i++) switch (i) {
+	case 0: today+=31; break;
+	case 1: today+=28+((year%4==0&&year%100!=0)||year%400==0); break;
+	case 2: today+=31; break;
+	case 3: today+=30; break;
+	case 4: today+=31; break;
+	case 5: today+=30; break;
+	case 6: today+=31; break;
+	case 7: today+=31; break;
+	case 8: today+=30; break;
+	case 9: today+=31; break;
+	case 10: today+=30; break;
+	}
+	return today;
+}
+
 function getPremember(entry, day) {
-	return Math.pow(2, -((day||today)-entry.day)/Math.pow(2,entry.score));
+	return Math.pow(2, -((day||getIdayToday())-entry.day)/Math.pow(2,entry.score));
 }
 
 function refreshNleft() {
 	let nToday=0, nTomorrow=0;
+	const today = getIdayToday();
 	for (const entry of entries) {
-		if (getPremember(entry) <= 0.5) nToday++;
+		if (getPremember(entry,today) <= 0.5) nToday++;
 		if (getPremember(entry,today+1) <= 0.5) nTomorrow++;
 	}
 	ntoday.textContent = nToday;
@@ -144,7 +167,7 @@ function refreshNleft() {
 }
 
 function addEntry(a, b) {
-	entries.push({a, b, day:today-1, score:0});
+	entries.push({a, b, day:getIdayToday(), score:0});
 	saveEntries();
 	refreshNleft();
 }
@@ -195,10 +218,10 @@ function recalcScreenHeights() {
 function showEdit() {
 
 	// Recreate entries
-	while (eentries.firstElementChild) eentries.removeChild(eentries.firstElementChild);
+	while (eentries.children[1]) eentries.removeChild(eentries.firstElementChild);
 	for (let i=0; i<entries.length; i++) {
 		const eEntry = cloneTemplate('edit');
-		eentries.appendChild(eEntry);
+		eentries.insertBefore(eEntry, version);
 		eEntry.querySelector('.editprompt').textContent = entries[i].a;
 		eEntry.querySelector('.editanswer').textContent = entries[i].b;
 		eEntry.querySelector('.edit').addEventListener('click', () => {
@@ -224,7 +247,7 @@ function showPractice() {
 
 function practicedEntry(score) {
 	entryPracticing.score = score;
-	entryPracticing.day = today;
+	entryPracticing.day = getIdayToday();
 	saveEntries();
 	refreshPractice();
 	refreshNleft();
@@ -319,23 +342,11 @@ search.addEventListener('input', () => {
 		eentries.children[i].style.display = (entries[i].a.match(re)||entries[i].b.match(re)) ? '' : 'none';
 });
 
-// Calculate today
-const now = new Date();
-const year = now.getFullYear();
-let today = year*365 + now.getDate();
-for (let i=0; i<now.getMonth(); i++) switch (i) {
-case 0: today+=31; break;
-case 1: today+=28+((year%4==0&&year%100!=0)||year%400==0); break;
-case 2: today+=31; break;
-case 3: today+=30; break;
-case 4: today+=31; break;
-case 5: today+=30; break;
-case 6: today+=31; break;
-case 7: today+=31; break;
-case 8: today+=30; break;
-case 9: today+=31; break;
-case 10: today+=30; break;
-}
+// Focus resumes (e.g. iOS web shortcut?)
+window.addEventListener('focus', () => {
+	if (document.body.dataset.practice === 'done') refreshPractice();
+	refreshNleft();
+});
 
 // Load entries
 let entries;
